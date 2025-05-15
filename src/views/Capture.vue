@@ -1,14 +1,12 @@
 <template>
   <div class="min-h-screen bg-gray-200 p-6">
     <h2 class="text-2xl font-semibold mb-4 text-center">📸 Tambah Dataset Handsign</h2>
-
     <div class="flex flex-col md:flex-row justify-center gap-6">
       <!-- Kamera -->
       <div class="relative w-full md:w-2/3 rounded-lg overflow-hidden shadow-lg bg-black">
         <video ref="video" autoplay playsinline class="w-full h-auto"></video>
         <canvas ref="canvas" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
       </div>
-
       <!-- Form & Tombol -->
       <div class="w-full md:w-1/3 bg-white p-4 rounded-lg shadow-md flex flex-col gap-4">
         <label class="text-lg font-semibold">Label Handsign:</label>
@@ -18,7 +16,6 @@
           placeholder="Contoh: makan, berdoa"
           class="border p-2 rounded w-full"
         />
-
         <div class="flex flex-col gap-2">
           <button
             class="bg-green-500 hover:bg-green-600 text-white py-2 rounded"
@@ -42,7 +39,6 @@
            Ambil Gambar
           </button>
         </div>
-
         <div v-if="lastImage" class="mt-4">
           <p class="font-medium">🖼️ Preview:</p>
           <img :src="lastImage" alt="Preview" class="rounded border" />

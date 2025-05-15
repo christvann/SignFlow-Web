@@ -1,19 +1,15 @@
 <template>
   <div class="min-h-screen bg-gray-200 p-6">
-    <h2 class="text-2xl font-semibold mb-4 text-center">Deteksi Handsign</h2>
-    <div class="flex flex-col md:flex-row justify-center items-start gap-6">
-      <!-- Video + Canvas -->
-      <div class="w-full md:w-2/3 relative rounded-lg overflow-hidden shadow-md bg-black">
-        <video ref="video" class="w-full h-auto" autoplay muted playsinline></video>
+    <h2 class="text-2xl font-bold mb-4 text-center">🔍 Deteksi Handsign</h2>
+    <div class="flex flex-col md:flex-row gap-6 justify-center">
+      <div class="relative w-full md:w-2/3 bg-black rounded-lg overflow-hidden shadow-md">
+        <video ref="video" autoplay muted playsinline class="w-full h-auto"></video>
         <canvas ref="canvas" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
       </div>
-      <!-- Output -->
       <div class="w-full md:w-1/3 bg-white p-4 rounded-lg shadow-md">
-        <h3 class="text-xl font-bold mb-2">Hasil Deteksi:</h3>
-        <div class="text-2xl font-mono text-blue-600 whitespace-pre-line">
-          {{ detectedText }}
-        </div>
-        <div class="mt-6 flex flex-col gap-2">
+        <h3 class="text-lg font-bold mb-2">Hasil Deteksi:</h3>
+        <div class="text-xl font-mono text-blue-600 whitespace-pre-line">{{ detectedText }}</div>
+        <div class="mt-4 flex flex-col gap-2">
           <button class="bg-green-500 hover:bg-green-600 text-white py-2 rounded" @click="startCamera">Mulai Kamera</button>
           <button class="bg-red-500 hover:bg-red-600 text-white py-2 rounded" @click="stopCamera">Berhenti</button>
           <button class="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded" @click="resetText">Reset</button>
@@ -30,51 +26,58 @@ import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 
-// Refs
 const video = ref(null);
 const canvas = ref(null);
 const detectedText = ref("Belum ada gesture");
-
-// Model
 const model = ref(null);
+const labels = ref([]);
 const isModelLoaded = ref(false);
 let camera = null;
 
-// Label sesuai dengan dataset Anda
-const labels = [
-  "berdoa", "makan", "minum", "bapak", "ibu", "halo", "pergi", "datang",
-  "ya", "tidak", "tolong", "maaf", "sakit", "senang", "sedih", "belajar",
-  "main", "kerja", "selesai", "diam", "lainnya"
-];
-
-// Load model saat komponen mount
+// Load model saat komponen dimount
 onMounted(async () => {
   try {
     detectedText.value = "⏳ Memuat model...";
+
+    await tf.setBackend("webgl");
+
+    await tf.ready();
+
+    console.log("✅ Backend aktif:", tf.getBackend());// Debugging
+    
+    // Pastikan backend sudah aktif
+    if (!tf.engine()?.backend) {
+      console.error("❌ Backend belum siap!");
+      return;
+    }
+    console.log("✅ Backend aktif:", tf.getBackend());
+
     model.value = await tf.loadLayersModel("/tfjs_model/model.json");
+    const res = await fetch("/labels.json");
+    labels.value = await res.json();
+
     isModelLoaded.value = true;
-    console.log("✅ Model berhasil dimuat:", model.value.summary());
-    console.log("Input shape:", model.value.inputs[0].shape); // Harus [null, 63]
     detectedText.value = "✅ Model siap digunakan";
-  } catch (error) {
-    console.error("❌ Gagal memuat model:", error);
+  } catch (err) {
+    console.error("❌ Gagal load model:", err);
     detectedText.value = "❌ Gagal memuat model";
   }
 });
 
-// Mulai kamera dan deteksi tangan
-const startCamera = async () => {
-  if (!video.value || !canvas.value || !isModelLoaded.value) return;
+const startCamera = () => {
+  if (!video.value || !canvas.value || !isModelLoaded.value) {
+    console.warn("⚠️ Kamera atau model belum siap");
+    return;
+  }
 
   const hands = new Hands({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
   });
 
   hands.setOptions({
-    maxNumHands: 1,
+    maxNumHands: 2,
     modelComplexity: 1,
-    minDetectionConfidence: 0.5,
+    minDetectionConfidence: 0.7,
     minTrackingConfidence: 0.5,
   });
 
@@ -82,7 +85,11 @@ const startCamera = async () => {
 
   camera = new Camera(video.value, {
     onFrame: async () => {
-      await hands.send({ image: video.value });
+      try {
+        await hands.send({ image: video.value });
+      } catch (err) {
+        console.error("❌ Error hands.send:", err);
+      }
     },
     width: 640,
     height: 480,
@@ -91,112 +98,73 @@ const startCamera = async () => {
   camera.start();
 };
 
-// Berhenti dari deteksi
 const stopCamera = () => {
   if (camera) {
     camera.stop();
     camera = null;
   }
-  detectedText.value = "Belum ada gesture";
-
   const ctx = canvas.value.getContext("2d");
   ctx.clearRect(0, 0, canvas.value.width, canvas.value.height);
+  detectedText.value = "Belum ada gesture";
 };
 
-// Reset teks
 const resetText = () => {
   detectedText.value = "Belum ada gesture";
 };
 
-// Fungsi utama untuk menangani hasil deteksi
 const onResults = async (results) => {
-  console.log("📊 Hasil deteksi MediaPipe Hands:", results);
-
-  const ctx = canvas.value?.getContext("2d");
-  const width = video.value?.videoWidth ?? 640;
-  const height = video.value?.videoHeight ?? 480;
-
-  if (ctx && canvas.value) {
-    canvas.value.width = width;
-    canvas.value.height = height;
-    ctx.clearRect(0, 0, width, height);
+  if (!model.value || !isModelLoaded.value || !tf.engine()?.backend) {
+    console.warn("⚠️ Model atau backend belum siap");
+    detectedText.value = "❌ Model belum siap";
+    return;
   }
 
-  if (
-    results &&
-    results.multiHandLandmarks &&
-    results.multiHandLandmarks.length > 0
-  ) {
-    const landmarks = results.multiHandLandmarks[0];
+  const ctx = canvas.value.getContext("2d");
+  const width = video.value.videoWidth;
+  const height = video.value.videoHeight;
+  canvas.value.width = width;
+  canvas.value.height = height;
+  ctx.clearRect(0, 0, width, height);
 
-    // Gambar landmark dan konektor
-    if (ctx) {
-      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {
-        color: "#0f0",
-        lineWidth: 2,
-      });
+  if (results.multiHandLandmarks?.length > 0) {
+    let texts = [];
+
+    for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+      const landmarks = results.multiHandLandmarks[i];
+
+      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, { color: "#0f0", lineWidth: 2 });
       drawLandmarks(ctx, landmarks, { color: "#00f", radius: 3 });
+
+      try {
+        const inputTensor = tf.tensor([landmarks.flatMap((p) => [p.x, p.y, p.z])], [1, 63], "float32");
+
+        if (!model.value) {
+          console.error("❌ Model belum siap digunakan!");
+          return;
+        }
+
+        const prediction = model.value.predict(inputTensor);
+        const scores = prediction.dataSync();
+        const maxIndex = scores.indexOf(Math.max(...scores));
+        const label = labels.value[maxIndex];
+        const confidence = (scores[maxIndex] * 100).toFixed(1);
+
+        texts.push(`Tangan ${i + 1}: ${label} (${confidence}%)`);
+
+        inputTensor.dispose();
+        prediction.dispose?.();
+      } catch (err) {
+        console.error("❌ Gagal prediksi:", err);
+        texts.push(`Tangan ${i + 1}: error`);
+      }
     }
 
-    // Hitung kotak pembatas (bounding box)
-    const bbox = calculateBoundingBox(landmarks);
-    if (ctx) {
-      ctx.strokeStyle = "#f00";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
-    }
-
-    try {
-      // Buat input tensor [1, 63]
-      const flatLandmarks = landmarks.flatMap((p) => [p.x, p.y, p.z]);
-
-      // Debugging
-      console.log("🧮 Landmark data:", flatLandmarks);
-      const input = tf.tensor(flatLandmarks).reshape([1, 63]);
-      console.log("🧠 Input Tensor Shape:", input.shape); // Harus [1, 63]
-
-      // Prediksi menggunakan model
-      const prediction = model.value.predict(input);
-      const result = await prediction.argMax(-1).data();
-      const labelIndex = result[0];
-
-      // Tampilkan hasil
-      detectedText.value = labels[labelIndex] || "Tidak dikenali";
-    } catch (e) {
-      console.error("🚨 Error saat prediksi:", e);
-      detectedText.value = "Error saat prediksi";
-    }
+    detectedText.value = texts.join("\n");
   } else {
     detectedText.value = "✋ Tangan tidak terdeteksi";
   }
 };
 
-// Fungsi bantu: menghitung bounding box
-const calculateBoundingBox = (landmarks) => {
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-
-  landmarks.forEach((p) => {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  });
-
-  const width = canvas.value?.width ?? 640;
-  const height = canvas.value?.height ?? 480;
-
-  return {
-    x: minX * width,
-    y: minY * height,
-    width: (maxX - minX) * width,
-    height: (maxY - minY) * height,
-  };
-};
-
-// Bersihkan kamera saat komponen unmount
 onBeforeUnmount(() => {
   stopCamera();
 });

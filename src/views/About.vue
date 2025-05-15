@@ -14,9 +14,12 @@
       </p>
       <p>
         <b>Cara Penggunaan:</b><br />
-        1. Buka halaman Deteksi<br />
+        1. Buka halaman Capture<br />
         2. Aktifkan kamera<br />
-        3. Tampilkan gesture tangan
+        3. Tampilkan gesture tangan <br />
+        4. Masukkan label untuk handsign tadi <br />
+        5. Ambil Gambar untuk menyimpan data tadi <br />
+        6. Coba Detect di Page Detect
       </p>
       <p>
         <b>SignFlow</b> mencerminkan filosofi bahwa komunikasi yang efektif dan lancar dapat membawa perubahan positif. Dengan menggunakan teknologi untuk menerjemahkan bahasa isyarat menjadi teks, <b>SignFlow</b> bertujuan untuk menghilangkan

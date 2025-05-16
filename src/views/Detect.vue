@@ -34,27 +34,29 @@ const labels = ref([]);
 const isModelLoaded = ref(false);
 let camera = null;
 
-// Load model saat komponen dimount
 onMounted(async () => {
   try {
     detectedText.value = "⏳ Memuat model...";
-
-    await tf.setBackend("webgl");
-
-    await tf.ready();
-
-    console.log("✅ Backend aktif:", tf.getBackend());// Debugging
     
-    // Pastikan backend sudah aktif
-    if (!tf.engine()?.backend) {
-      console.error("❌ Backend belum siap!");
-      return;
+    // Pastikan backend terset dan siap
+    await tf.setBackend("webgl");
+    await tf.ready();
+    await new Promise((r) => setTimeout(r, 500)); // delay 500ms
+
+    if (!tf.engine() || !tf.engine().backend) {
+      throw new Error("TensorFlow.js backend belum siap!");
     }
+
     console.log("✅ Backend aktif:", tf.getBackend());
 
     model.value = await tf.loadLayersModel("/tfjs_model/model.json");
+
     const res = await fetch("/labels.json");
     labels.value = await res.json();
+
+    if (!model.value || labels.value.length === 0) {
+      throw new Error("Model atau label gagal dimuat sepenuhnya.");
+    }
 
     isModelLoaded.value = true;
     detectedText.value = "✅ Model siap digunakan";
@@ -64,11 +66,14 @@ onMounted(async () => {
   }
 });
 
+
 const startCamera = () => {
   if (!video.value || !canvas.value || !isModelLoaded.value) {
     console.warn("⚠️ Kamera atau model belum siap");
     return;
   }
+
+  console.log("📷 Mulai kamera...");
 
   const hands = new Hands({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
@@ -88,7 +93,7 @@ const startCamera = () => {
       try {
         await hands.send({ image: video.value });
       } catch (err) {
-        console.error("❌ Error hands.send:", err);
+        console.error("❌ [ERROR hands.send]:", err);
       }
     },
     width: 640,
@@ -100,6 +105,7 @@ const startCamera = () => {
 
 const stopCamera = () => {
   if (camera) {
+    console.log("🛑 Stop kamera");
     camera.stop();
     camera = null;
   }
@@ -109,13 +115,19 @@ const stopCamera = () => {
 };
 
 const resetText = () => {
+  console.log("🔄 Reset teks deteksi");
   detectedText.value = "Belum ada gesture";
 };
 
 const onResults = async (results) => {
-  if (!model.value || !isModelLoaded.value || !tf.engine()?.backend) {
-    console.warn("⚠️ Model atau backend belum siap");
-    detectedText.value = "❌ Model belum siap";
+  if (!model.value || !isModelLoaded.value) {
+    console.warn("⚠️ Model belum siap");
+    return;
+  }
+
+  // ❗ Tambahkan pengecekan backend AKTIF
+  if (!tf.engine() || !tf.engine().backend) {
+    console.warn("⚠️ Backend belum siap");
     return;
   }
 
@@ -131,30 +143,23 @@ const onResults = async (results) => {
 
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
       const landmarks = results.multiHandLandmarks[i];
-
       drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, { color: "#0f0", lineWidth: 2 });
       drawLandmarks(ctx, landmarks, { color: "#00f", radius: 3 });
 
       try {
         const inputTensor = tf.tensor([landmarks.flatMap((p) => [p.x, p.y, p.z])], [1, 63], "float32");
 
-        if (!model.value) {
-          console.error("❌ Model belum siap digunakan!");
-          return;
-        }
-
         const prediction = model.value.predict(inputTensor);
         const scores = prediction.dataSync();
         const maxIndex = scores.indexOf(Math.max(...scores));
         const label = labels.value[maxIndex];
         const confidence = (scores[maxIndex] * 100).toFixed(1);
-
         texts.push(`Tangan ${i + 1}: ${label} (${confidence}%)`);
 
         inputTensor.dispose();
         prediction.dispose?.();
       } catch (err) {
-        console.error("❌ Gagal prediksi:", err);
+        console.error(`❌ [Predict Error - Tangan ${i + 1}]:`, err);
         texts.push(`Tangan ${i + 1}: error`);
       }
     }
@@ -164,6 +169,7 @@ const onResults = async (results) => {
     detectedText.value = "✋ Tangan tidak terdeteksi";
   }
 };
+
 
 onBeforeUnmount(() => {
   stopCamera();

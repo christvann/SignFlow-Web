@@ -2,17 +2,45 @@
   <div class="min-h-screen bg-gray-200 p-6">
     <h2 class="text-2xl font-bold mb-4 text-center">🔍 Deteksi Handsign</h2>
     <div class="flex flex-col md:flex-row gap-6 justify-center">
-      <div class="relative w-full md:w-2/3 bg-black rounded-lg overflow-hidden shadow-md">
-        <video ref="video" autoplay muted playsinline class="w-full h-auto"></video>
-        <canvas ref="canvas" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
+      <div
+        class="relative w-full md:w-2/3 bg-black rounded-lg overflow-hidden shadow-md"
+      >
+        <video
+          ref="video"
+          autoplay
+          muted
+          playsinline
+          class="w-full h-auto"
+        ></video>
+        <canvas
+          ref="canvas"
+          class="absolute top-0 left-0 w-full h-full pointer-events-none"
+        ></canvas>
       </div>
       <div class="w-full md:w-1/3 bg-white p-4 rounded-lg shadow-md">
         <h3 class="text-lg font-bold mb-2">Hasil Deteksi:</h3>
-        <div class="text-xl font-mono text-blue-600 whitespace-pre-line">{{ detectedText }}</div>
+        <div class="text-xl font-mono text-blue-600 whitespace-pre-line">
+          {{ detectedText }}
+        </div>
         <div class="mt-4 flex flex-col gap-2">
-          <button class="bg-green-500 hover:bg-green-600 text-white py-2 rounded" @click="startCamera">Mulai Kamera</button>
-          <button class="bg-red-500 hover:bg-red-600 text-white py-2 rounded" @click="stopCamera">Berhenti</button>
-          <button class="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded" @click="resetText">Reset</button>
+          <button
+            class="bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+            @click="startCamera"
+          >
+            Mulai Kamera
+          </button>
+          <button
+            class="bg-red-500 hover:bg-red-600 text-white py-2 rounded"
+            @click="stopCamera"
+          >
+            Berhenti
+          </button>
+          <button
+            class="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded"
+            @click="resetText"
+          >
+            Reset
+          </button>
         </div>
       </div>
     </div>
@@ -29,7 +57,7 @@ import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 const video = ref(null);
 const canvas = ref(null);
 const detectedText = ref("Belum ada gesture");
-const model = ref(null);
+let model = null;
 const labels = ref([]);
 const isModelLoaded = ref(false);
 let camera = null;
@@ -37,24 +65,22 @@ let camera = null;
 onMounted(async () => {
   try {
     detectedText.value = "⏳ Memuat model...";
-    
-    // Pastikan backend terset dan siap
+
     await tf.setBackend("webgl");
     await tf.ready();
-    await new Promise((r) => setTimeout(r, 500)); // delay 500ms
 
     if (!tf.engine() || !tf.engine().backend) {
       throw new Error("TensorFlow.js backend belum siap!");
     }
 
     console.log("✅ Backend aktif:", tf.getBackend());
-
-    model.value = await tf.loadLayersModel("/tfjs_model/model.json");
+    
+    model = await tf.loadLayersModel("/tfjs_model/model.json");
 
     const res = await fetch("/labels.json");
     labels.value = await res.json();
 
-    if (!model.value || labels.value.length === 0) {
+    if (!model || labels.value.length === 0) {
       throw new Error("Model atau label gagal dimuat sepenuhnya.");
     }
 
@@ -66,7 +92,6 @@ onMounted(async () => {
   }
 });
 
-
 const startCamera = () => {
   if (!video.value || !canvas.value || !isModelLoaded.value) {
     console.warn("⚠️ Kamera atau model belum siap");
@@ -76,7 +101,8 @@ const startCamera = () => {
   console.log("📷 Mulai kamera...");
 
   const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
   });
 
   hands.setOptions({
@@ -120,12 +146,11 @@ const resetText = () => {
 };
 
 const onResults = async (results) => {
-  if (!model.value || !isModelLoaded.value) {
+  if (!model || !isModelLoaded.value) {
     console.warn("⚠️ Model belum siap");
     return;
   }
 
-  // ❗ Tambahkan pengecekan backend AKTIF
   if (!tf.engine() || !tf.engine().backend) {
     console.warn("⚠️ Backend belum siap");
     return;
@@ -143,13 +168,20 @@ const onResults = async (results) => {
 
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
       const landmarks = results.multiHandLandmarks[i];
-      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, { color: "#0f0", lineWidth: 2 });
+      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {
+        color: "#0f0",
+        lineWidth: 2,
+      });
       drawLandmarks(ctx, landmarks, { color: "#00f", radius: 3 });
 
       try {
-        const inputTensor = tf.tensor([landmarks.flatMap((p) => [p.x, p.y, p.z])], [1, 63], "float32");
+        const inputTensor = tf.tensor(
+          [landmarks.flatMap((p) => [p.x, p.y, p.z])],
+          [1, 63],
+          "float32"
+        );
 
-        const prediction = model.value.predict(inputTensor);
+        const prediction = model.predict(inputTensor);
         const scores = prediction.dataSync();
         const maxIndex = scores.indexOf(Math.max(...scores));
         const label = labels.value[maxIndex];
@@ -169,7 +201,6 @@ const onResults = async (results) => {
     detectedText.value = "✋ Tangan tidak terdeteksi";
   }
 };
-
 
 onBeforeUnmount(() => {
   stopCamera();

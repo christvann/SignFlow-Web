@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-200 p-6">
-    <h2 class="text-2xl font-semibold mb-4 text-center">📸 Tambah Dataset Handsign</h2>
+    <h2 class="text-2xl font-bold mb-4 text-center">📸 Tambah Dataset Handsign</h2>
     <div class="flex flex-col md:flex-row justify-center gap-6">
       <!-- Kamera -->
       <div class="relative w-full md:w-2/3 rounded-lg overflow-hidden shadow-lg bg-black">

@@ -7,14 +7,16 @@
         <canvas ref="canvas" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
       </div>
       <div class="w-full md:w-1/3 bg-white p-4 rounded-lg shadow-md">
-        <h3 class="text-lg font-bold mb-2">Hasil Deteksi:</h3>
-        <div class="text-xl font-mono text-blue-600 whitespace-pre-line">
-          {{ detectedText }}
-        </div>
-        <div class="mt-4 flex flex-col gap-2">
+        <h3 class="text-lg font-semibold mb-2">Hasil Deteksi:</h3>
+        <div class="text-xl font-mono text-blue-600 whitespace-pre-line">{{ detectedText }}</div>
+        <!-- Hasil Deteksi Hand-To-Text -->
+        <div class="mt-4 font-semibold text-lg text-black">📝 Kalimat : {{ sentence.join(" ") }}</div>
+        <div class="mt-4 flex flex-col gap-2 px-2">
           <button class="bg-green-500 hover:bg-green-600 text-white py-2 rounded" @click="startCamera">Mulai Kamera</button>
-          <button class="bg-red-500 hover:bg-red-600 text-white py-2 rounded" @click="stopCamera">Berhenti</button>
+          <button class="bg-red-500 hover:bg-red-600 text-white py-2 rounded" @click="stopCamera">Matikan Kamera</button>
           <button class="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded" @click="resetText">Reset</button>
+          <button class="bg-red-600 hover:bg-red-700 text-white py-2 rounded" @click="undoLastWord">Hapus Kata</button>
+          <button class="bg-purple-500 hover:bg-purple-600 text-white py-2 rounded" @click="speakSentence">🔊 Ucapkan Kalimat</button>
         </div>
       </div>
     </div>
@@ -31,51 +33,69 @@ import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 const video = ref(null);
 const canvas = ref(null);
 const detectedText = ref("Belum ada gesture");
+const sentence = ref([]);
 let model = null;
 const labels = ref([]);
 const isModelLoaded = ref(false);
 let camera = null;
 
+// Timer untuk jeda antar penambahan kata (ms)
+let lastDetectionTime = 0;
+const detectionInterval = 1500; // 1.5 detik
+
+function updateSentence(newWord) {
+  const lastWord = sentence.value[sentence.value.length - 1];
+  if (newWord !== lastWord) {
+    sentence.value.push(newWord);
+    if (sentence.value.length > 20) sentence.value.shift(); // batas kalimat
+  }
+}
+
+const resetText = () => {
+  detectedText.value = "Belum ada gesture";
+  sentence.value = [];
+};
+
+const undoLastWord = () => {
+  if (sentence.value.length > 0) sentence.value.pop();
+};
+
+const speakSentence = () => {
+  const text = sentence.value.join(" ");
+  if (!text) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "id-ID";
+  utterance.voice = speechSynthesis.getVoices().find(v => v.lang === "id-ID" && v.name.includes("male")) || null;
+  speechSynthesis.speak(utterance);
+};
+
 onMounted(async () => {
   try {
     detectedText.value = "⏳ Memuat model...";
-
     await tf.setBackend("webgl");
     await tf.ready();
 
-    if (!tf.engine() || !tf.engine().backend) {
-      throw new Error("TensorFlow.js backend belum siap!");
-    }
+    if (!tf.engine()?.backend) throw new Error("Backend belum siap!");
 
     console.log("✅ Backend aktif:", tf.getBackend());
-
     model = await tf.loadLayersModel("/tfjs_model/model.json");
-
     const res = await fetch("/labels.json");
     labels.value = await res.json();
 
-    if (!model || labels.value.length === 0) {
-      throw new Error("Model atau label gagal dimuat sepenuhnya.");
-    }
-
+    if (!model || labels.value.length === 0) throw new Error("Model/label tidak valid.");
     isModelLoaded.value = true;
     detectedText.value = "✅ Model siap digunakan";
   } catch (err) {
-    console.error("❌ Gagal load model:", err);
+    console.error("❌ Gagal memuat model:", err);
     detectedText.value = "❌ Gagal memuat model";
   }
 });
 
 const startCamera = () => {
-  if (!video.value || !canvas.value || !isModelLoaded.value) {
-    console.warn("⚠️ Kamera atau model belum siap");
-    return;
-  }
-
-  console.log("📷 Mulai kamera...");
+  if (!video.value || !canvas.value || !isModelLoaded.value) return console.warn("⚠️ Tidak siap");
 
   const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
   });
 
   hands.setOptions({
@@ -92,7 +112,7 @@ const startCamera = () => {
       try {
         await hands.send({ image: video.value });
       } catch (err) {
-        console.error("❌ [ERROR hands.send]:", err);
+        console.error("❌ hands.send error:", err);
       }
     },
     width: 640,
@@ -104,7 +124,6 @@ const startCamera = () => {
 
 const stopCamera = () => {
   if (camera) {
-    console.log("🛑 Stop kamera");
     camera.stop();
     camera = null;
   }
@@ -113,21 +132,8 @@ const stopCamera = () => {
   detectedText.value = "Belum ada gesture";
 };
 
-const resetText = () => {
-  console.log("🔄 Reset teks deteksi");
-  detectedText.value = "Belum ada gesture";
-};
-
 const onResults = async (results) => {
-  if (!model || !isModelLoaded.value) {
-    console.warn("⚠️ Model belum siap");
-    return;
-  }
-
-  if (!tf.engine() || !tf.engine().backend) {
-    console.warn("⚠️ Backend belum siap");
-    return;
-  }
+  if (!model || !isModelLoaded.value || !tf.engine()?.backend) return;
 
   const ctx = canvas.value.getContext("2d");
   const width = video.value.videoWidth;
@@ -137,35 +143,48 @@ const onResults = async (results) => {
   ctx.clearRect(0, 0, width, height);
 
   if (results.multiHandLandmarks?.length > 0) {
-    let texts = [];
+    let highestConfidence = 0;
+    let bestLabel = "";
+    let displayTexts = [];
 
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
       const landmarks = results.multiHandLandmarks[i];
-      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {
-        color: "#0f0",
-        lineWidth: 2,
-      });
+      drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, { color: "#0f0", lineWidth: 2 });
       drawLandmarks(ctx, landmarks, { color: "#00f", radius: 3 });
 
       try {
-        const inputTensor = tf.tensor([landmarks.flatMap((p) => [p.x, p.y, p.z])], [1, 63], "float32");
-
+        const inputTensor = tf.tensor([landmarks.flatMap(p => [p.x, p.y, p.z])], [1, 63], "float32");
         const prediction = model.predict(inputTensor);
         const scores = prediction.dataSync();
         const maxIndex = scores.indexOf(Math.max(...scores));
+        const confidence = scores[maxIndex];
         const label = labels.value[maxIndex];
-        const confidence = (scores[maxIndex] * 100).toFixed(1);
-        texts.push(`Tangan ${i + 1}: ${label} (${confidence}%)`);
+        const confidencePercent = (confidence * 100).toFixed(1);
+
+        displayTexts.push(`Tangan ${i + 1}: ${label} (${confidencePercent}%)`);
+
+        // Simpan label terbaik jika confidence cukup tinggi
+        if (confidence > 0.5 && confidence > highestConfidence) {
+          highestConfidence = confidence;
+          bestLabel = label;
+        }
 
         inputTensor.dispose();
         prediction.dispose?.();
       } catch (err) {
-        console.error(`❌ [Predict Error - Tangan ${i + 1}]:`, err);
-        texts.push(`Tangan ${i + 1}: error`);
+        console.error(`❌ Predict Error - Tangan ${i + 1}:`, err);
+        displayTexts.push(`Tangan ${i + 1}: error`);
       }
     }
 
-    detectedText.value = texts.join("\n");
+    // Tambahkan ke kalimat jika ada label terbaik & sudah lewat jeda
+    const now = Date.now();
+    if (bestLabel && now - lastDetectionTime >= detectionInterval) {
+      updateSentence(bestLabel);
+      lastDetectionTime = now;
+    }
+
+    detectedText.value = displayTexts.join("\n");
   } else {
     detectedText.value = "✋ Tangan tidak terdeteksi";
   }

@@ -14,25 +14,25 @@
           v-model="label"
           type="text"
           placeholder="Contoh: makan, berdoa"
-          class="border p-2 rounded w-full"
+          class="border-[2px] p-2 rounded w-full"
         />
         <div class="flex flex-col gap-2">
           <button
-            class="bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+            class="bg-[#FFFFFF] border-[#28A745] border-[2px] hover:bg-[#DCFCE7] cursor-pointer transition-all py-2 rounded font-semibold"
             @click="startCamera"
             :disabled="isCameraOn"
           >
            Mulai Kamera
           </button>
           <button
-            class="bg-red-500 hover:bg-red-600 text-white py-2 rounded"
+            class="bg-[#FFFFFF] border-[#C53830] border-[2px] hover:bg-[#FEE2E2] cursor-pointer transition-all py-2 rounded font-semibold"
             @click="stopCamera"
             :disabled="!isCameraOn"
           >
-           Stop Kamera
+           Matikan Kamera
           </button>
           <button
-            class="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded"
+            class="bg-[#FFFFFF] border-[#17A2B8] border-[2px] hover:bg-[#D1F3F8] cursor-pointer transition-all py-2 rounded font-semibold"
             @click="captureImage"
             :disabled="!label || !isCameraOn"
           >

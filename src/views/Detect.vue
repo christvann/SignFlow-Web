@@ -11,12 +11,13 @@
         <div class="text-xl font-mono text-blue-600 whitespace-pre-line">{{ detectedText }}</div>
         <!-- Hasil Deteksi Hand-To-Text -->
         <div class="mt-4 font-semibold text-lg text-black">📝 Kalimat : {{ sentence.join(" ") }}</div>
-        <div class="mt-4 flex flex-col gap-2 px-2">
-          <button class="bg-green-500 hover:bg-green-600 text-white py-2 rounded" @click="startCamera">Mulai Kamera</button>
-          <button class="bg-red-500 hover:bg-red-600 text-white py-2 rounded" @click="stopCamera">Matikan Kamera</button>
-          <button class="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded" @click="resetText">Reset</button>
-          <button class="bg-red-600 hover:bg-red-700 text-white py-2 rounded" @click="undoLastWord">Hapus Kata</button>
-          <button class="bg-purple-500 hover:bg-purple-600 text-white py-2 rounded" @click="speakSentence">🔊 Ucapkan Kalimat</button>
+        <hr class="my-8 border-[#6C757D] sm:mx-auto dark:border-[#6C757D] lg:my-8" />
+        <div class="mt-8 flex flex-col gap-2 px-2">
+          <button class="bg-[#FFFFFF] border-[#28A745] border-[2px] hover:bg-[#DCFCE7] cursor-pointer transition-all py-2 rounded font-semibold" @click="startCamera">Mulai Kamera</button>
+          <button class="bg-[#FFFFFF] border-[#C53830] border-[2px] hover:bg-[#FEE2E2] cursor-pointer transition-all py-2 rounded font-semibold" @click="stopCamera">Matikan Kamera</button>
+          <button class="bg-[#FFFFFF] border-[#E0A800] border-[2px] hover:bg-[#FEF3C7] cursor-pointer transition-all py-2 rounded font-semibold" @click="resetText">Reset</button>
+          <button class="bg-[#FFFFFF] border-[#6C757D] border-[2px] hover:bg-[#E2E3E5] cursor-pointer transition-all py-2 rounded font-semibold" @click="undoLastWord">Hapus Kata</button>
+          <button class="bg-[#FFFFFF] border-[#007BFF] border-[2px] hover:bg-[#DBEAFE] cursor-pointer transition-all py-2 rounded font-semibold" @click="speakSentence">🔊 Ucapkan Kalimat</button>
         </div>
       </div>
     </div>
@@ -39,7 +40,7 @@ const labels = ref([]);
 const isModelLoaded = ref(false);
 let camera = null;
 
-// Timer untuk jeda antar penambahan kata (ms)
+// timer untuk jeda antar kata (ms)
 let lastDetectionTime = 0;
 const detectionInterval = 1500; // 1.5 detik
 
@@ -65,7 +66,7 @@ const speakSentence = () => {
   if (!text) return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "id-ID";
-  utterance.voice = speechSynthesis.getVoices().find(v => v.lang === "id-ID" && v.name.includes("male")) || null;
+  utterance.voice = speechSynthesis.getVoices().find((v) => v.lang === "id-ID" && v.name.includes("male")) || null;
   speechSynthesis.speak(utterance);
 };
 
@@ -95,7 +96,7 @@ const startCamera = () => {
   if (!video.value || !canvas.value || !isModelLoaded.value) return console.warn("⚠️ Tidak siap");
 
   const hands = new Hands({
-    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
   });
 
   hands.setOptions({
@@ -153,7 +154,7 @@ const onResults = async (results) => {
       drawLandmarks(ctx, landmarks, { color: "#00f", radius: 3 });
 
       try {
-        const inputTensor = tf.tensor([landmarks.flatMap(p => [p.x, p.y, p.z])], [1, 63], "float32");
+        const inputTensor = tf.tensor([landmarks.flatMap((p) => [p.x, p.y, p.z])], [1, 63], "float32");
         const prediction = model.predict(inputTensor);
         const scores = prediction.dataSync();
         const maxIndex = scores.indexOf(Math.max(...scores));
@@ -163,7 +164,7 @@ const onResults = async (results) => {
 
         displayTexts.push(`Tangan ${i + 1}: ${label} (${confidencePercent}%)`);
 
-        // Simpan label terbaik jika confidence cukup tinggi
+        // simpan label terbaik jika confidence cukup tinggi
         if (confidence > 0.5 && confidence > highestConfidence) {
           highestConfidence = confidence;
           bestLabel = label;
@@ -177,7 +178,7 @@ const onResults = async (results) => {
       }
     }
 
-    // Tambahkan ke kalimat jika ada label terbaik & sudah lewat jeda
+    // menambahkan ke display jika ada label terbaik & sudah lewat jeda
     const now = Date.now();
     if (bestLabel && now - lastDetectionTime >= detectionInterval) {
       updateSentence(bestLabel);
